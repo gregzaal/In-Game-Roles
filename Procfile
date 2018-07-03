@@ -1,0 +1,1 @@
+worker: python in-game-roles.py
