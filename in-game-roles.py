@@ -26,6 +26,7 @@ def get_config():
     cf = os.path.join(script_dir, 'config.json')
     if not os.path.exists(cf):
         print ("Config file doesn't exist!")
+        import sys
         sys.exit(0)
     return read_json(cf)
 
