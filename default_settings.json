@@ -1,0 +1,10 @@
+{
+    "aliases": {},
+    "blacklist": [],
+    "enabled": false,
+    "gamelist": [],
+    "ignoreusers": [],
+    "playerthreshold": 3,
+    "whitelistonly": false,
+    "whitelist": []
+}
