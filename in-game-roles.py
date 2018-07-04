@@ -67,13 +67,24 @@ def strip_quotes(s):
             s = s[:-1]
     return s
 
+def ascii_only(s):
+    ns = ""
+    printable_chars = list([chr(i) for i in range(32,127)])
+    for c in s:
+        if c in printable_chars:
+            ns += c
+        else:
+            ns += '_'
+    return ns
+
+
 def log(msg, server=None):
     text = datetime.now().strftime("%Y-%m-%d %H:%M")
     text += ' '
     if server:
         text += '['+server.name+']'
         text += ' '
-    text += str(msg)
+    text += str(ascii_only(msg))
     print(text)
 
 async def echo (msg, channel='auto', server=None):
