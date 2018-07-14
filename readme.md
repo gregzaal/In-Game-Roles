@@ -7,4 +7,4 @@ A discord bot that assigns roles for the game that members are currently playing
 TODO
 ----
 
-- Only admins can do commands
+- Periodically purge game roles (and items in gamelist) that have no players, but only if the role hasn't been modified since creation.
