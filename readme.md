@@ -8,3 +8,4 @@ TODO
 ----
 
 - Periodically purge game roles (and items in gamelist) that have no players, but only if the role hasn't been modified since creation.
+- Allow fetching user with both "gregzaal" and "@gregzaal"
