@@ -4,6 +4,7 @@
     "enabled": false,
     "gamelist": [],
     "ignoreusers": [],
+    "requiredrole": "",
     "playerthreshold": 3,
     "whitelistonly": false,
     "whitelist": []

@@ -207,198 +207,232 @@ async def on_message(message):
         channel = message.channel
         settings = get_serv_settings(server.id)
 
-        if cmd == 'enable':
-            if settings['enabled']:
-                await echo("Already enabled. Use 'ig~disable' to turn off.", channel)
-            else:
-                await echo("Enabling automatic role assignments based on current game. Turn off with 'ig~disable'.", channel)
-                settings['enabled'] = True
-                set_serv_settings(server.id, settings)
+        # Restricted commands
+        user_role_ids = list([r.id for r in message.author.roles])
+        if not settings['requiredrole'] or settings['requiredrole'] in user_role_ids:
+            if cmd == 'enable':
+                if settings['enabled']:
+                    await echo("Already enabled. Use 'ig~disable' to turn off.", channel)
+                else:
+                    await echo("Enabling automatic role assignments based on current game. Turn off with 'ig~disable'.", channel)
+                    settings['enabled'] = True
+                    set_serv_settings(server.id, settings)
 
-        elif cmd == 'disable':
-            if not settings['enabled']:
-                await echo("Already disabled. Use 'ig~enable' to turn on.", channel)
-                log("Enabling", server)
-            else:
-                await echo("Disabling automatic role assignments and removing roles from users. Turn on again with 'ig~enable'.", channel)
-                log("Disabling", server)
-                settings['enabled'] = False
-                set_serv_settings(server.id, settings)
+            elif cmd == 'disable':
+                if not settings['enabled']:
+                    await echo("Already disabled. Use 'ig~enable' to turn on.", channel)
+                    log("Enabling", server)
+                else:
+                    await echo("Disabling automatic role assignments and removing roles from users. Turn on again with 'ig~enable'.", channel)
+                    log("Disabling", server)
+                    settings['enabled'] = False
+                    set_serv_settings(server.id, settings)
 
-                cgd = current_games_dict(settings, server)
-                aliases = settings['aliases']
-                for g in cgd:
-                    gname = g
-                    if g in aliases:
-                        gname = aliases[g]
+                    cgd = current_games_dict(settings, server)
+                    aliases = settings['aliases']
+                    for g in cgd:
+                        gname = g
+                        if g in aliases:
+                            gname = aliases[g]
+                        for r in server.roles:
+                            if r.name == gname:
+                                for m in server.members:
+                                    if r in m.roles:
+                                        await catch_http_error(client.remove_roles, m, r)
+                                break
+            
+            elif cmd == 'list':
+                msg = "Whitelist:\n"
+                l = settings['whitelist']
+                if l:
+                    for g in l:
+                        msg += ' * \'' + g + '\'\n'
+                else:
+                    msg += "* No games in whitelist. Add some with 'ig~add [Game name]'"
+                await echo(msg, channel)
+
+                msg = "Blacklist:\n"
+                l = settings['blacklist']
+                if l:
+                    for g in l:
+                        msg += ' * \'' + g + '\'\n'
+                else:
+                    msg += "* No games in blacklist. Add some with 'ig~remove [Game name]'"
+                await echo(msg, channel)
+                
+                msg = "Aliases:\n"
+                a = settings['aliases']
+                if a:
+                    for g in a:
+                        msg += ' * \'' + g + '\'  >  \'' + a[g] + '\'\n'
+                else:
+                    msg += "* No aliases. Add some with 'ig~alias [Actual game name] >> [New name]'"
+                await echo(msg, channel)
+
+                msg = "Currently played games:\n"
+                d = {}
+                for m in server.members:
+                    if m.game:
+                        gname = str(m.game)
+                        if gname in d:
+                            d[gname] += 1
+                        else:
+                            d[gname] = 1
+                d = sorted(d.items(), key=lambda x: x[1])  # Creates a tuple version of sorted dict
+                for t in d:
+                    msg += ' * \'' + t[0] + '\' (' + str(t[1]) + ')\n'
+                await echo(msg, channel)
+            
+            elif cmd == 'add':
+                gname = strip_quotes(params_str)
+
+                if not gname:
+                    await echo("Incorrect syntax for add command. Should be: 'ig~add [Game name]' (without square brackets).", channel)
+                else:
+                    if gname not in settings['whitelist']:
+                        await echo("Adding '" + gname + "' to the whitelist", channel)
+                        settings['whitelist'].append(gname)
+                    else:
+                        await echo("'" + gname + "' is already on the whitelist", channel)
+
+                    if gname in settings['blacklist']:
+                        await echo("Removing '" + gname + "' from the blacklist", channel)
+                        settings['blacklist'].remove(gname)
+                
+                set_serv_settings(server.id, settings)
+            
+            elif cmd == 'alias':
+                gsplit = params_str.split('>>')
+                if len(gsplit) != 2 or not gsplit[0] or not gsplit[-1]:
+                    await echo("Incorrect syntax for alias command. Should be: 'ig~alias [Actual game name] >> [New name]' (without square brackets).", channel)
+                else:
+                    gname = strip_quotes(gsplit[0])
+                    aname = strip_quotes(gsplit[1])
+                    oname = gname
+                    if gname in settings['aliases']:
+                        oaname = settings['aliases'][gname]
+                        oname = oaname
+                        await echo("'" + gname + "' already has an alias ('" + oaname + "'), it will be replaced with '" + aname + "'.", channel)
+                    else:
+                        await echo("'" + gname + "' will now be shown as '" + aname + "'.", channel)
+                    settings['aliases'][gname] = aname
+                    set_serv_settings(server.id, settings)
+
+                    # Edit role with old name
+                    for r in server.roles:
+                        if r.name == oname:
+                            await catch_http_error(client.edit_role, server, r, name=aname)
+
+            elif cmd == 'movetotop':
+                # TODO error handling (e.g. no param)
+                gname = strip_quotes(params_str)
+                success = False
+                
+                if gname in settings['whitelist']:
+                    success = True
+                    settings['whitelist'].remove(gname)
+                    settings['whitelist'].insert(0, gname)
+                if gname in settings['gamelist']:
+                    success = True
+                    settings['gamelist'].remove(gname)
+                    settings['gamelist'].insert(0, gname)
+
+                if success:
+                    await echo("Moving '" + gname + "'' to the top!", channel)
+                    set_serv_settings(server.id, settings)
+                else:
+                    await echo("Can't find '" + gname + "'' on either gamelist or whitelist. Make sure you use the original game name, not an alias.", channel)                
+
+            elif cmd == 'remove':
+                gname = strip_quotes(params_str)
+
+                if not gname:
+                    await echo("Incorrect syntax for remove command. Should be: 'ig~remove [Game name]' (without square brackets).", channel)
+                else:
+                    if gname not in settings['blacklist']:
+                        await echo("Adding '" + gname + "' to the blacklist", channel)
+                        settings['blacklist'].append(gname)
+                    else:
+                        await echo("'" + gname + "' is already on the blacklist", channel)
+
+                    if gname in settings['whitelist']:
+                        await echo("Removing '" + gname + "' from the whitelist", channel)
+                        settings['whitelist'].remove(gname)
+                    
+                    set_serv_settings(server.id, settings)
+                    
                     for r in server.roles:
                         if r.name == gname:
-                            for m in server.members:
-                                if r in m.roles:
-                                    await catch_http_error(client.remove_roles, m, r)
+                            await catch_http_error(client.delete_role, server, r)
+                            await echo("Deleting '" + gname + "' role", channel)
                             break
-        
-        elif cmd == 'list':
-            msg = "Whitelist:\n"
-            l = settings['whitelist']
-            if l:
-                for g in l:
-                    msg += ' * \'' + g + '\'\n'
-            else:
-                msg += "* No games in whitelist. Add some with 'ig~add [Game name]'"
-            await echo(msg, channel)
 
-            msg = "Blacklist:\n"
-            l = settings['blacklist']
-            if l:
-                for g in l:
-                    msg += ' * \'' + g + '\'\n'
-            else:
-                msg += "* No games in blacklist. Add some with 'ig~remove [Game name]'"
-            await echo(msg, channel)
-            
-            msg = "Aliases:\n"
-            a = settings['aliases']
-            if a:
-                for g in a:
-                    msg += ' * \'' + g + '\'  >  \'' + a[g] + '\'\n'
-            else:
-                msg += "* No aliases. Add some with 'ig~alias [Actual game name] >> [New name]'"
-            await echo(msg, channel)
+            elif cmd == 'playerthreshold':
+                value = strip_quotes(params_str)
+                try:
+                    value = int(value)
+                except ValueError:
+                    await echo("That doesn't make any sense. Expected input is 'ig~playerthreshold X' where X is a number.", channel)
+                else:
+                    await echo("Threshold set! Only games with " + str(value) + " or more current players will be included.", channel)
+                    settings['playerthreshold'] = value
+                    set_serv_settings(server.id, settings)
 
-            msg = "Currently played games:\n"
-            d = {}
-            for m in server.members:
-                if m.game:
-                    gname = str(m.game)
-                    if gname in d:
-                        d[gname] += 1
+            elif cmd == 'clearwhitelist':
+                await echo("Clearing the whitelist.", channel)
+                settings['whitelist'] = []
+                set_serv_settings(server.id, settings)
+
+            elif cmd == 'whitelistonly':
+                settings['whitelistonly'] = not settings['whitelistonly']
+                if settings['whitelistonly']:
+                    await echo("Now only whitelisted games will be shown.", channel)
+                else:
+                    await echo("Now all games will be shown, as long as they have more than " + str(settings['playerthreshold']) + " players. Whitelisted games will always show.", channel)
+                set_serv_settings(server.id, settings)
+
+            elif cmd == 'ignore':
+                user = strip_quotes(params_str)
+                if user not in settings['ignoreusers']:
+                    settings['ignoreusers'].append(user)
+                    await echo("Ignoring user \""+user+"\".", channel)
+                else:
+                    settings['ignoreusers'].remove(user)
+                    await echo("\""+user+"\" was previously ignored and will now be watched.", channel)
+                set_serv_settings(server.id, settings)
+
+            elif cmd == 'listroles':
+                l = ["ID" + ' '*18 + "\"Name\"  (Creation Date)"]
+                l.append('='*len(l[0]))
+                roles = sorted(server.roles, key=lambda x: x.created_at)
+                for r in roles:
+                    l.append(r.id+"  \""+r.name+"\"  (Created on "+r.created_at.strftime("%Y/%m/%d")+")")
+                await echo('\n'.join(l), channel)
+
+            elif cmd == 'restrict':
+                role_id = strip_quotes(params_str)
+                if not role_id:
+                    await echo ("You need to specifiy the id of the role. Use 'ig~listroles' to see the IDs of all roles, then do 'ig~restrict 123456789101112131'", channel)
+                else:
+                    valid_ids = list([r.id for r in server.roles])
+                    if role_id not in valid_ids:
+                        await echo (valid_ids, channel)
+                        await echo (role_id + " is not a valid id of any existing role. Use 'ig~listroles' to see the IDs of all roles.", channel)
                     else:
-                        d[gname] = 1
-            d = sorted(d.items(), key=lambda x: x[1])  # Creates a tuple version of sorted dict
-            for t in d:
-                msg += ' * \'' + t[0] + '\' (' + str(t[1]) + ')\n'
-            await echo(msg, channel)
-        
-        elif cmd == 'add':
-            gname = strip_quotes(params_str)
+                        role = None
+                        for r in server.roles:
+                            if r.id == role_id:
+                                role = r
+                                break
+                        if role not in message.author.roles:
+                            await echo ("You need to have this role yourself in order to restrict commands to it.", channel)
+                        else:
+                            settings['requiredrole'] = role.id
+                            set_serv_settings(server.id, settings)
+                            await echo ("From now on, most commands will be restricted to users with the \"" + role.name + "\" role.", channel)
 
-            if not gname:
-                await echo("Incorrect syntax for add command. Should be: 'ig~add [Game name]' (without square brackets).", channel)
-            else:
-                if gname not in settings['whitelist']:
-                    await echo("Adding '" + gname + "' to the whitelist", channel)
-                    settings['whitelist'].append(gname)
-                else:
-                    await echo("'" + gname + "' is already on the whitelist", channel)
-
-                if gname in settings['blacklist']:
-                    await echo("Removing '" + gname + "' from the blacklist", channel)
-                    settings['blacklist'].remove(gname)
-            
-            set_serv_settings(server.id, settings)
-        
-        elif cmd == 'alias':
-            gsplit = params_str.split('>>')
-            if len(gsplit) != 2 or not gsplit[0] or not gsplit[-1]:
-                await echo("Incorrect syntax for alias command. Should be: 'ig~alias [Actual game name] >> [New name]' (without square brackets).", channel)
-            else:
-                gname = strip_quotes(gsplit[0])
-                aname = strip_quotes(gsplit[1])
-                oname = gname
-                if gname in settings['aliases']:
-                    oaname = settings['aliases'][gname]
-                    oname = oaname
-                    await echo("'" + gname + "' already has an alias ('" + oaname + "'), it will be replaced with '" + aname + "'.", channel)
-                else:
-                    await echo("'" + gname + "' will now be shown as '" + aname + "'.", channel)
-                settings['aliases'][gname] = aname
-                set_serv_settings(server.id, settings)
-
-                # Edit role with old name
-                for r in server.roles:
-                    if r.name == oname:
-                        await catch_http_error(client.edit_role, server, r, name=aname)
-
-        elif cmd == 'movetotop':
-            # TODO error handling (e.g. no param)
-            gname = strip_quotes(params_str)
-            success = False
-            
-            if gname in settings['whitelist']:
-                success = True
-                settings['whitelist'].remove(gname)
-                settings['whitelist'].insert(0, gname)
-            if gname in settings['gamelist']:
-                success = True
-                settings['gamelist'].remove(gname)
-                settings['gamelist'].insert(0, gname)
-
-            if success:
-                await echo("Moving '" + gname + "'' to the top!", channel)
-                set_serv_settings(server.id, settings)
-            else:
-                await echo("Can't find '" + gname + "'' on either gamelist or whitelist. Make sure you use the original game name, not an alias.", channel)                
-
-        elif cmd == 'remove':
-            gname = strip_quotes(params_str)
-
-            if not gname:
-                await echo("Incorrect syntax for remove command. Should be: 'ig~remove [Game name]' (without square brackets).", channel)
-            else:
-                if gname not in settings['blacklist']:
-                    await echo("Adding '" + gname + "' to the blacklist", channel)
-                    settings['blacklist'].append(gname)
-                else:
-                    await echo("'" + gname + "' is already on the blacklist", channel)
-
-                if gname in settings['whitelist']:
-                    await echo("Removing '" + gname + "' from the whitelist", channel)
-                    settings['whitelist'].remove(gname)
-                
-                set_serv_settings(server.id, settings)
-                
-                for r in server.roles:
-                    if r.name == gname:
-                        await catch_http_error(client.delete_role, server, r)
-                        await echo("Deleting '" + gname + "' role", channel)
-                        break
-
-        elif cmd == 'playerthreshold':
-            value = strip_quotes(params_str)
-            try:
-                value = int(value)
-            except ValueError:
-                await echo("That doesn't make any sense. Expected input is 'ig~playerthreshold X' where X is a number.", channel)
-            else:
-                await echo("Threshold set! Only games with " + str(value) + " or more current players will be included.", channel)
-                settings['playerthreshold'] = value
-                set_serv_settings(server.id, settings)
-
-        elif cmd == 'clearwhitelist':
-            await echo("Clearing the whitelist.", channel)
-            settings['whitelist'] = []
-            set_serv_settings(server.id, settings)
-
-        elif cmd == 'whitelistonly':
-            settings['whitelistonly'] = not settings['whitelistonly']
-            if settings['whitelistonly']:
-                await echo("Now only whitelisted games will be shown.", channel)
-            else:
-                await echo("Now all games will be shown, as long as they have more than " + str(settings['playerthreshold']) + " players. Whitelisted games will always show.", channel)
-            set_serv_settings(server.id, settings)
-
-        elif cmd == 'ignore':
-            user = params_str
-            if user not in settings['ignoreusers']:
-                settings['ignoreusers'].append(user)
-                await echo("Ignoring user \""+user+"\".", channel)
-            else:
-                settings['ignoreusers'].remove(user)
-                await echo("\""+user+"\" was previously ignored and will now be watched.", channel)
-            set_serv_settings(server.id, settings)
-
-        elif cmd == 'ignoreme':
+        # Commands all users can do
+        if cmd == 'ignoreme':
             user = message.author.name
             if user not in settings['ignoreusers']:
                 settings['ignoreusers'].append(user)
