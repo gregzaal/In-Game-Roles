@@ -96,7 +96,16 @@ async def echo (msg, channel='auto', server=None):
         return
     else:
         last_channel = channel
-    await catch_http_error(client.send_message, channel, fmsg(msg))
+
+    max_chars = 1950  # Discord has a character limit of 2000 per message. fmsg adds a bit, so use 1950 to be safe.
+    msg = str(msg)
+    if len(msg) < max_chars:
+        await catch_http_error(client.send_message, channel, fmsg(msg))
+    else:
+        # Send message in chunks if it's longer than max_chars
+        chunks = list([msg[i:i+max_chars] for i in range(0, len(msg), max_chars)])
+        for c in chunks:
+            await catch_http_error(client.send_message, channel, fmsg(c))
     return
 
 async def catch_http_error (function, *args, **kwargs):
@@ -112,7 +121,9 @@ async def catch_http_error (function, *args, **kwargs):
             r = await function()
         return r
     except discord.errors.HTTPException:
-        log ("   !! ENCOUNTERED HTTP ERROR !!")
+        import traceback
+        print(traceback.format_exc())
+        log ("   !! ENCOUNTERED HTTP ERROR IN FUNC " + function.__name__ + " !!")
 
 def current_games_dict(settings, server):
     whitelist = settings['whitelist']  # TODO
@@ -403,9 +414,25 @@ async def on_message(message):
                 set_serv_settings(server.id, settings)
 
             elif cmd == 'listroles':
+                username = strip_quotes(params_str)
+                if username:
+                    # Show roles of particular user if param is provided
+                    found_user = False
+                    for m in server.members:
+                        if m.name == username:
+                            roles = m.roles
+                            found_user = True
+                            break
+                    if not found_user:
+                        await echo ("There is no user named \"" + username + "\"")
+                        return
+                else:
+                    # If no param is provided, show all roles in server
+                    roles = server.roles
+
                 l = ["ID" + ' '*18 + "\"Name\"  (Creation Date)"]
                 l.append('='*len(l[0]))
-                roles = sorted(server.roles, key=lambda x: x.created_at)
+                roles = sorted(roles, key=lambda x: x.created_at)
                 for r in roles:
                     l.append(r.id+"  \""+r.name+"\"  (Created on "+r.created_at.strftime("%Y/%m/%d")+")")
                 await echo('\n'.join(l), channel)
