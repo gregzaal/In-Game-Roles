@@ -96,8 +96,23 @@ async def echo (msg, channel='auto', server=None):
         return
     else:
         last_channel = channel
-    await client.send_message(channel, fmsg(msg))
+    await catch_http_error(client.send_message, channel, fmsg(msg))
     return
+
+async def catch_http_error (function, *args, **kwargs):
+    try:
+        if args or kwargs:
+            if args and not kwargs:
+                r = await function(*args)
+            elif kwargs and not args:
+                r = await function(**kwargs)
+            else:
+                r = await function(*args, **kwargs)
+        else:
+            r = await function()
+        return r
+    except discord.errors.HTTPException:
+        log ("   !! ENCOUNTERED HTTP ERROR !!")
 
 def current_games_dict(settings, server):
     whitelist = settings['whitelist']  # TODO
@@ -108,8 +123,6 @@ def current_games_dict(settings, server):
     for g in gamelist:
         d[g] = []
     for m in server.members:
-        if m.name in settings['ignoreusers']:
-            continue
         if m.game:
             gname = str(m.game)
             if gname in d:
@@ -151,7 +164,7 @@ async def update_roles(server, channel=None):
             if is_not_on_blacklist:
                 if not settings['whitelistonly'] or is_on_whitelist:
                     if (num_players >= settings['playerthreshold'] or is_on_whitelist):
-                        role = await client.create_role(server, name=gname, hoist=True)
+                        role = await catch_http_error(client.create_role, server, name=gname, hoist=True)
                         await echo ("Created role "+gname, channel, server)
         else:
             for r in server.roles:
@@ -159,23 +172,22 @@ async def update_roles(server, channel=None):
                     role = r
                     break
         for m in members:
-            if m.name in settings['ignoreusers']:
-                continue
             current_roles = m.roles
             should_have_role = False
             if m in cgd[g]:
-                if is_not_on_blacklist:
-                    if not settings['whitelistonly'] or is_on_whitelist:
-                        if (num_players >= settings['playerthreshold'] or is_on_whitelist):
-                            should_have_role = True
-                            if role not in current_roles:
-                                if get_serv_settings(server.id)['enabled']:  # Just to be sure it wasn't disabled during this process
-                                    await echo ("Assign role " + role.name + " to " + m.name, channel, server)
-                                    await client.add_roles(m, role)
+                if m.name not in settings['ignoreusers']:
+                    if is_not_on_blacklist:
+                        if not settings['whitelistonly'] or is_on_whitelist:
+                            if (num_players >= settings['playerthreshold'] or is_on_whitelist):
+                                should_have_role = True
+                                if role not in current_roles:
+                                    if get_serv_settings(server.id)['enabled']:  # Just to be sure it wasn't disabled during this process
+                                        await echo ("Assign role " + role.name + " to " + m.name, channel, server)
+                                        await catch_http_error(client.add_roles, m, role)
             if not should_have_role:
                 if role in current_roles:
                     await echo ("Removing role " + role.name + " from " + m.name, channel, server)
-                    await client.remove_roles(m, role)
+                    await catch_http_error(client.remove_roles, m, role)
 
 @client.event
 async def on_message(message):
@@ -223,7 +235,7 @@ async def on_message(message):
                         if r.name == gname:
                             for m in server.members:
                                 if r in m.roles:
-                                    await client.remove_roles(m, r)
+                                    await catch_http_error(client.remove_roles, m, r)
                             break
         
         elif cmd == 'list':
@@ -306,7 +318,7 @@ async def on_message(message):
                 # Edit role with old name
                 for r in server.roles:
                     if r.name == oname:
-                        await client.edit_role(server, r, name=aname)
+                        await catch_http_error(client.edit_role, server, r, name=aname)
 
         elif cmd == 'movetotop':
             # TODO error handling (e.g. no param)
@@ -348,7 +360,7 @@ async def on_message(message):
                 
                 for r in server.roles:
                     if r.name == gname:
-                        await client.delete_role(server, r)
+                        await catch_http_error(client.delete_role, server, r)
                         await echo("Deleting '" + gname + "' role", channel)
                         break
 
@@ -364,13 +376,41 @@ async def on_message(message):
                 set_serv_settings(server.id, settings)
 
         elif cmd == 'clearwhitelist':
-            await echo("Clearing the whitelist. All games (except those on the blacklist) will be shown now.", channel)
+            await echo("Clearing the whitelist.", channel)
             settings['whitelist'] = []
+            set_serv_settings(server.id, settings)
+
+        elif cmd == 'whitelistonly':
+            settings['whitelistonly'] = not settings['whitelistonly']
+            if settings['whitelistonly']:
+                await echo("Now only whitelisted games will be shown.", channel)
+            else:
+                await echo("Now all games will be shown, as long as they have more than " + str(settings['playerthreshold']) + " players. Whitelisted games will always show.", channel)
+            set_serv_settings(server.id, settings)
+
+        elif cmd == 'ignore':
+            user = params_str
+            if user not in settings['ignoreusers']:
+                settings['ignoreusers'].append(user)
+                await echo("Ignoring user \""+user+"\".", channel)
+            else:
+                settings['ignoreusers'].remove(user)
+                await echo("\""+user+"\" was previously ignored and will now be watched.", channel)
+            set_serv_settings(server.id, settings)
+
+        elif cmd == 'ignoreme':
+            user = message.author.name
+            if user not in settings['ignoreusers']:
+                settings['ignoreusers'].append(user)
+                await echo("Ignoring user \""+user+"\".", channel)
+            else:
+                settings['ignoreusers'].remove(user)
+                await echo("\""+user+"\" was previously ignored and will now be watched.", channel)
             set_serv_settings(server.id, settings)
 
 
 async def background_task():
-    await client.wait_until_ready()
+    await catch_http_error(client.wait_until_ready)
     global config
     counter = 0
     while not client.is_closed:
