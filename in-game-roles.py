@@ -128,7 +128,8 @@ def current_games_dict(settings, server):
             if gname in d:
                 d[gname].append(m)
             else:
-                log ("Discovered new game! " + gname)
+                if m.name not in settings['ignoreusers']:  # Don't log discovery of games for new users, but we still need to store it.
+                    log ("Discovered new game! " + gname)
                 d[gname] = [m]
                 gamelist.append(gname)
                 need_settings_update = True
