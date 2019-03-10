@@ -168,20 +168,21 @@ async def update_roles(server, channel=None):
         gname = g
         if g in aliases:
             gname = aliases[g]
+        rname = '▶ '+gname
 
         is_on_whitelist = g in whitelist or gname in whitelist
         is_not_on_blacklist = g not in blacklist and gname not in blacklist
 
-        if gname not in roles:
+        if rname not in roles:
             role = None
             if is_not_on_blacklist:
                 if not settings['whitelistonly'] or is_on_whitelist:
                     if (num_players >= settings['playerthreshold'] or is_on_whitelist):
-                        await echo ("Creating role "+gname, channel, server)
-                        role = await catch_http_error(client.create_role, server, name=gname, hoist=True)
+                        await echo ("Creating role for "+gname, channel, server)
+                        role = await catch_http_error(client.create_role, server, name=rname, hoist=True)
         else:
             for r in server.roles:
-                if r.name == gname:
+                if r.name == rname:
                     role = r
                     break
 
@@ -260,7 +261,7 @@ async def on_message(message):
                         if g in aliases:
                             gname = aliases[g]
                         for r in server.roles:
-                            if r.name == gname:
+                            if r.name == '▶ '+gname:
                                 for m in server.members:
                                     if r in m.roles:
                                         await catch_http_error(client.remove_roles, m, r)
@@ -387,7 +388,7 @@ async def on_message(message):
                     set_serv_settings(server.id, settings)
                     
                     for r in server.roles:
-                        if r.name == gname:
+                        if r.name == '▶ '+gname:
                             await catch_http_error(client.delete_role, server, r)
                             await echo("Deleting '" + gname + "' role", channel)
                             break
