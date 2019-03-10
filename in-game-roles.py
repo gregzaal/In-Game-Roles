@@ -134,16 +134,17 @@ def current_games_dict(settings, server):
     for g in gamelist:
         d[g] = []
     for m in server.members:
-        if m.game:
-            gname = str(m.game)
-            if gname in d:
-                d[gname].append(m)
-            else:
-                if m.name not in settings['ignoreusers']:  # Don't log discovery of games for new users, but we still need to store it.
-                    log ("Discovered new game! " + gname)
-                d[gname] = [m]
-                gamelist.append(gname)
-                need_settings_update = True
+        if not m.bot:
+            if m.game:
+                gname = str(m.game)
+                if gname in d:
+                    d[gname].append(m)
+                else:
+                    if m.name not in settings['ignoreusers']:  # Don't log discovery of games for new users, but we still need to store it.
+                        log ("Discovered new game! " + gname)
+                    d[gname] = [m]
+                    gamelist.append(gname)
+                    need_settings_update = True
     if need_settings_update:
         settings['gamelist'] = gamelist
         set_serv_settings(server.id, settings)
@@ -176,13 +177,15 @@ async def update_roles(server, channel=None):
             if is_not_on_blacklist:
                 if not settings['whitelistonly'] or is_on_whitelist:
                     if (num_players >= settings['playerthreshold'] or is_on_whitelist):
+                        await echo ("Creating role "+gname, channel, server)
                         role = await catch_http_error(client.create_role, server, name=gname, hoist=True)
-                        await echo ("Created role "+gname, channel, server)
         else:
             for r in server.roles:
                 if r.name == gname:
                     role = r
                     break
+
+        users_with_role = 0
         for m in members:
             current_roles = m.roles
             should_have_role = False
@@ -192,14 +195,24 @@ async def update_roles(server, channel=None):
                         if not settings['whitelistonly'] or is_on_whitelist:
                             if (num_players >= settings['playerthreshold'] or is_on_whitelist):
                                 should_have_role = True
+                                users_with_role += 1
                                 if role not in current_roles:
-                                    if get_serv_settings(server.id)['enabled']:  # Just to be sure it wasn't disabled during this process
-                                        await echo ("Assign role " + role.name + " to " + m.name, channel, server)
-                                        await catch_http_error(client.add_roles, m, role)
+                                    if not role:  # Might be None if there was an error creating it
+                                        await echo("No role! "+gname, channel, server)
+                                    else:
+                                        if get_serv_settings(server.id)['enabled']:  # Just to be sure it wasn't disabled during this process
+                                            await echo ("Assign role " + role.name + " to " + m.name, channel, server)
+                                            await catch_http_error(client.add_roles, m, role)
             if not should_have_role:
                 if role in current_roles:
                     await echo ("Removing role " + role.name + " from " + m.name, channel, server)
                     await catch_http_error(client.remove_roles, m, role)
+        
+        if users_with_role == 0 and role:
+            if not is_on_whitelist:
+                await echo("Deleting role "+role.name, channel, server)
+                await catch_http_error(client.delete_role, server, role)
+
 
 @client.event
 async def on_message(message):
