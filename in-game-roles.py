@@ -239,15 +239,18 @@ async def on_message(message):
             if cmd == 'enable':
                 if settings['enabled']:
                     await echo("Already enabled. Use 'ig~disable' to turn off.", channel)
+                    await client.add_reaction(message, "❌")
                 else:
                     await echo("Enabling automatic role assignments based on current game. Turn off with 'ig~disable'.", channel)
                     settings['enabled'] = True
                     set_serv_settings(server.id, settings)
+                    await client.add_reaction(message, "✅")
 
             elif cmd == 'disable':
                 if not settings['enabled']:
                     await echo("Already disabled. Use 'ig~enable' to turn on.", channel)
                     log("Enabling", server)
+                    await client.add_reaction(message, "❌")
                 else:
                     await echo("Disabling automatic role assignments and removing roles from users. Turn on again with 'ig~enable'.", channel)
                     log("Disabling", server)
@@ -266,6 +269,7 @@ async def on_message(message):
                                     if r in m.roles:
                                         await catch_http_error(client.remove_roles, m, r)
                                 break
+                    await client.add_reaction(message, "❌")
             
             elif cmd == 'list':
                 msg = "Whitelist:\n"
@@ -308,22 +312,28 @@ async def on_message(message):
                 for t in d:
                     msg += ' * \'' + t[0] + '\' (' + str(t[1]) + ')\n'
                 await echo(msg, channel)
+                await client.add_reaction(message, "✅")
+                await client.add_reaction(message, "✅")
             
             elif cmd == 'add':
                 gname = strip_quotes(params_str)
 
                 if not gname:
                     await echo("Incorrect syntax for add command. Should be: 'ig~add [Game name]' (without square brackets).", channel)
+                    await client.add_reaction(message, "❌")
                 else:
                     if gname not in settings['whitelist']:
                         await echo("Adding '" + gname + "' to the whitelist", channel)
                         settings['whitelist'].append(gname)
+                        await client.add_reaction(message, "✅")
                     else:
                         await echo("'" + gname + "' is already on the whitelist", channel)
+                        await client.add_reaction(message, "❌")
 
                     if gname in settings['blacklist']:
                         await echo("Removing '" + gname + "' from the blacklist", channel)
                         settings['blacklist'].remove(gname)
+                        await client.add_reaction(message, "✅")
                 
                 set_serv_settings(server.id, settings)
             
@@ -331,6 +341,7 @@ async def on_message(message):
                 gsplit = params_str.split('>>')
                 if len(gsplit) != 2 or not gsplit[0] or not gsplit[-1]:
                     await echo("Incorrect syntax for alias command. Should be: 'ig~alias [Actual game name] >> [New name]' (without square brackets).", channel)
+                    await client.add_reaction(message, "❌")
                 else:
                     gname = strip_quotes(gsplit[0])
                     aname = strip_quotes(gsplit[1])
@@ -349,6 +360,8 @@ async def on_message(message):
                         if r.name == oname:
                             await catch_http_error(client.edit_role, server, r, name=aname)
 
+                    await client.add_reaction(message, "✅")
+
             elif cmd == 'movetotop':
                 # TODO error handling (e.g. no param)
                 gname = strip_quotes(params_str)
@@ -366,24 +379,30 @@ async def on_message(message):
                 if success:
                     await echo("Moving '" + gname + "'' to the top!", channel)
                     set_serv_settings(server.id, settings)
+                    await client.add_reaction(message, "✅")
                 else:
-                    await echo("Can't find '" + gname + "'' on either gamelist or whitelist. Make sure you use the original game name, not an alias.", channel)                
+                    await echo("Can't find '" + gname + "'' on either gamelist or whitelist. Make sure you use the original game name, not an alias.", channel)
+                    await client.add_reaction(message, "❌")
 
             elif cmd == 'remove':
                 gname = strip_quotes(params_str)
 
                 if not gname:
                     await echo("Incorrect syntax for remove command. Should be: 'ig~remove [Game name]' (without square brackets).", channel)
+                    await client.add_reaction(message, "❌")
                 else:
                     if gname not in settings['blacklist']:
                         await echo("Adding '" + gname + "' to the blacklist", channel)
                         settings['blacklist'].append(gname)
+                        await client.add_reaction(message, "✅")
                     else:
                         await echo("'" + gname + "' is already on the blacklist", channel)
+                        await client.add_reaction(message, "❌")
 
                     if gname in settings['whitelist']:
                         await echo("Removing '" + gname + "' from the whitelist", channel)
                         settings['whitelist'].remove(gname)
+                        await client.add_reaction(message, "✅")
                     
                     set_serv_settings(server.id, settings)
                     
@@ -399,15 +418,18 @@ async def on_message(message):
                     value = int(value)
                 except ValueError:
                     await echo("That doesn't make any sense. Expected input is 'ig~playerthreshold X' where X is a number.", channel)
+                    await client.add_reaction(message, "❌")
                 else:
                     await echo("Threshold set! Only games with " + str(value) + " or more current players will be included.", channel)
                     settings['playerthreshold'] = value
                     set_serv_settings(server.id, settings)
+                    await client.add_reaction(message, "✅")
 
             elif cmd == 'clearwhitelist':
                 await echo("Clearing the whitelist.", channel)
                 settings['whitelist'] = []
                 set_serv_settings(server.id, settings)
+                await client.add_reaction(message, "✅")
 
             elif cmd == 'whitelistonly':
                 settings['whitelistonly'] = not settings['whitelistonly']
@@ -416,6 +438,7 @@ async def on_message(message):
                 else:
                     await echo("Now all games will be shown, as long as they have more than " + str(settings['playerthreshold']) + " players. Whitelisted games will always show.", channel)
                 set_serv_settings(server.id, settings)
+                await client.add_reaction(message, "✅")
 
             elif cmd == 'ignore':
                 user = strip_quotes(params_str)
@@ -426,6 +449,7 @@ async def on_message(message):
                     settings['ignoreusers'].remove(user)
                     await echo("\""+user+"\" was previously ignored and will now be watched.", channel)
                 set_serv_settings(server.id, settings)
+                await client.add_reaction(message, "✅")
 
             elif cmd == 'listroles':
                 username = strip_quotes(params_str)
@@ -439,6 +463,7 @@ async def on_message(message):
                             break
                     if not found_user:
                         await echo ("There is no user named \"" + username + "\"")
+                        await client.add_reaction(message, "❌")
                         return
                 else:
                     # If no param is provided, show all roles in server
@@ -450,16 +475,19 @@ async def on_message(message):
                 for r in roles:
                     l.append(r.id+"  \""+r.name+"\"  (Created on "+r.created_at.strftime("%Y/%m/%d")+")")
                 await echo('\n'.join(l), channel)
+                await client.add_reaction(message, "✅")
 
             elif cmd == 'restrict':
                 role_id = strip_quotes(params_str)
                 if not role_id:
                     await echo ("You need to specifiy the id of the role. Use 'ig~listroles' to see the IDs of all roles, then do 'ig~restrict 123456789101112131'", channel)
+                    await client.add_reaction(message, "❌")
                 else:
                     valid_ids = list([r.id for r in server.roles])
                     if role_id not in valid_ids:
                         await echo (valid_ids, channel)
                         await echo (role_id + " is not a valid id of any existing role. Use 'ig~listroles' to see the IDs of all roles.", channel)
+                        await client.add_reaction(message, "❌")
                     else:
                         role = None
                         for r in server.roles:
@@ -468,10 +496,12 @@ async def on_message(message):
                                 break
                         if role not in message.author.roles:
                             await echo ("You need to have this role yourself in order to restrict commands to it.", channel)
+                            await client.add_reaction(message, "❌")
                         else:
                             settings['requiredrole'] = role.id
                             set_serv_settings(server.id, settings)
                             await echo ("From now on, most commands will be restricted to users with the \"" + role.name + "\" role.", channel)
+                            await client.add_reaction(message, "✅")
 
         # Commands all users can do
         if cmd == 'ignoreme':
@@ -483,6 +513,7 @@ async def on_message(message):
                 settings['ignoreusers'].remove(user)
                 await echo("\""+user+"\" was previously ignored and will now be watched.", channel)
             set_serv_settings(server.id, settings)
+            await client.add_reaction(message, "✅")
 
 
 async def background_task():
