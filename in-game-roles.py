@@ -165,7 +165,7 @@ async def update_roles(server, channel=None):
     for g in cgd:
         num_players = len(cgd[g])
 
-        gname = g
+        gname = g.strip()
         if g in aliases:
             gname = aliases[g]
         rname = '▶ '+gname
@@ -312,7 +312,6 @@ async def on_message(message):
                 for t in d:
                     msg += ' * \'' + t[0] + '\' (' + str(t[1]) + ')\n'
                 await echo(msg, channel)
-                await client.add_reaction(message, "✅")
                 await client.add_reaction(message, "✅")
             
             elif cmd == 'add':
